@@ -66,10 +66,9 @@ parseArgs = Args <$> parseZipOut <*> parsePort <*> parseName <*> parseMini <*> p
         help "Server name shown to Tacview clients",
         value "tacview-server"
         ]
-    parseMini = flag Tacview.OriginalIds Tacview.MinifiedIds $ mconcat [
-        short 'm',
-        long "minify-ids",
-        help "Remap all ACMI IDs to small numbers"
+    parseMini = flag Tacview.MinifiedIds Tacview.OriginalIds $ mconcat [
+        long "no-minify-ids",
+        help "Do not remap ACMI IDs to small numbers"
         ]
 
 main :: IO ()
