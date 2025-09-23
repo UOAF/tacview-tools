@@ -5,9 +5,7 @@ module Data.Tacview.Ignores (filterLines, FilteredLines(..)) where
 
 import Control.Concurrent.Channel
 import Control.Concurrent.STM
-import Data.HashSet (HashSet)
-import Data.HashSet qualified as HS
-import Data.Set (Set)
+import GHC.Data.Word64Set qualified as WS
 import Data.HashMap.Strict qualified as HM
 import Data.Maybe
 import Data.Tacview
@@ -29,9 +27,9 @@ data IgnoreFilterState = IgnoreFilterState {
     --   if their properties contains one of these strings?
     ifsUneventful :: Vector Text,
     -- | What objects (by ID) are we currently ignoring?
-    ifsIgnored :: HashSet TacId,
+    ifsIgnored :: TacIdSet,
     -- | What objects' (by ID) events are we currently ignoring?
-    ifsEventsIgnored :: HashSet TacId,
+    ifsEventsIgnored :: TacIdSet,
     -- | Track total lines dropped
     ifsLinesDropped :: Int
 }
@@ -52,8 +50,8 @@ startState = IgnoreFilterState{..} where
         "Name=M72 LAW",
         "Name=M47 Dragon ATGM",
         "Name=AT-4" ]
-    ifsIgnored = HS.empty
-    ifsEventsIgnored = HS.empty
+    ifsIgnored = WS.empty
+    ifsEventsIgnored = WS.empty
     ifsLinesDropped = 0
 
 -- | Given a line and its object ID, update the list of things we're ignoring
@@ -64,10 +62,10 @@ updateIgnores i l fs = fs { ifsIgnored = newIg, ifsEventsIgnored = newEvIg } whe
     go
       -- If the line matches against any of our strings to ignore,
       -- insert the ID into the ignore set
-      | any (`T.isInfixOf` l) fs.ifsIgnore = (HS.insert i fs.ifsIgnored, fs.ifsEventsIgnored)
+      | any (`T.isInfixOf` l) fs.ifsIgnore = (WS.insert i fs.ifsIgnored, fs.ifsEventsIgnored)
       -- If the line matches against any of our strings of events to ignore,
       -- insert the ID into the events ignore set
-      | any (`T.isInfixOf` l) fs.ifsUneventful = (fs.ifsIgnored, HS.insert i fs.ifsEventsIgnored)
+      | any (`T.isInfixOf` l) fs.ifsUneventful = (fs.ifsIgnored, WS.insert i fs.ifsEventsIgnored)
       -- Otherwise everything is unchanged.
       | otherwise = (fs.ifsIgnored, fs.ifsEventsIgnored)
 
@@ -75,13 +73,13 @@ updateIgnores i l fs = fs { ifsIgnored = newIg, ifsEventsIgnored = newEvIg } whe
 --   and the list of things whose events we're ignoring.
 removeId :: TacId -> IgnoreFilterState -> IgnoreFilterState
 removeId i fs = fs { ifsIgnored = newIg, ifsEventsIgnored = newEvIg } where
-    newIg = HS.delete i fs.ifsIgnored
-    newEvIg = HS.delete i fs.ifsEventsIgnored
+    newIg = WS.delete i fs.ifsIgnored
+    newEvIg = WS.delete i fs.ifsEventsIgnored
 
 -- | We can ignore an event if all of its IDs are in the "ignored" or "events ignored" sets
-ignoreableEvent :: Set TacId -> IgnoreFilterState -> Bool
-ignoreableEvent es fs = not (HS.null toIgnore) && all (`HS.member` toIgnore) es
-    where toIgnore = HS.union fs.ifsIgnored fs.ifsEventsIgnored
+ignoreableEvent :: TacIdSet -> IgnoreFilterState -> Bool
+ignoreableEvent es fs = not (WS.null toIgnore) && all (`WS.member` toIgnore) (WS.toList es)
+    where toIgnore = WS.union fs.ifsIgnored fs.ifsEventsIgnored
 
 unlessMaybe :: Bool -> a -> Maybe a
 unlessMaybe b v = if b then Nothing else Just v
@@ -102,11 +100,11 @@ filterLines source sink = whileIO "while parsing and filtering lines" $ do
                 -- then get filtered on the _updated_ version of those, fs'
                 go (PropLine pid rawProps) = (p', fs') where
                     fs' = updateIgnores pid l fs
-                    p' = unlessMaybe (HS.member pid fs'.ifsIgnored) (PropLine pid $ sansG rawProps)
+                    p' = unlessMaybe (WS.member pid fs'.ifsIgnored) (PropLine pid $ sansG rawProps)
                 -- Skip a removal line if we're ignoring the object.
                 -- The next state is the current one with the ID removed.
                 go (RemLine r) = (p', fs') where
-                    p' = unlessMaybe (HS.member r fs.ifsIgnored) p
+                    p' = unlessMaybe (WS.member r fs.ifsIgnored) p
                     fs' = removeId r fs
                 -- Skip an event if it's ignoreable.
                 go (EventLine _ is _) = (p', fs) where

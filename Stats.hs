@@ -21,6 +21,7 @@ import Data.Tacview.Source qualified as Tacview
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Void
+import GHC.Data.Word64Map qualified as WM
 import Numeric
 import Options.Applicative
 import System.Clock.Seconds
@@ -126,7 +127,7 @@ data ObjectState = ObjectState {
 
 data StatState = StatState {
     currentTime :: Double,
-    liveObjects :: HashMap TacId ObjectState,
+    liveObjects :: TacIdMap ObjectState,
     deltaStats :: Map Text DeltaStats,
     counts :: HashMap Text Int
 }
@@ -141,9 +142,9 @@ update :: StatState -> Text -> StatState
 update s l = case parseLine l of
     TimeLine t -> s {currentTime = t}
     PropLine tid props -> newState where
-        prev = s.liveObjects HM.!? tid
+        prev = s.liveObjects WM.!? tid
         newObj = updateObjectState s.currentTime props prev
-        newObjs = HM.insert tid newObj s.liveObjects
+        newObjs = WM.insert tid newObj s.liveObjects
         newType = typeOf newObj
         od = objectDelta prev s.currentTime
         newStats = updateTypeStats od newType s.deltaStats
@@ -154,7 +155,7 @@ update s l = case parseLine l of
             counts = newCounts
         }
     RemLine tid -> s { liveObjects = axed} where
-        axed = HM.delete tid s.liveObjects
+        axed = WM.delete tid s.liveObjects
     _ -> s
 
 unprop :: Property -> Text

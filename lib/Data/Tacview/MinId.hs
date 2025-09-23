@@ -7,8 +7,8 @@ import Control.Concurrent.STM
 import Control.Monad
 import Data.HashTable.IO qualified as HM
 import Data.IORef
-import Data.Set qualified as S
 import Data.Tacview
+import GHC.Data.Word64Set qualified as S
 
 type IdTable = HM.BasicHashTable TacId TacId
 

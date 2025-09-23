@@ -8,10 +8,10 @@ import Control.Exception
 import Data.Bifunctor
 import Data.HashTable.IO qualified as HM
 import Data.IORef
-import Data.Set qualified as S
 import Data.Maybe
 import Data.Tacview
 import Data.Tacview.Delta
+import GHC.Data.Word64Set qualified as S
 
 -- Let's try out Google's hashmap implementation.
 -- This could just be in ST, but we want to interleave updates to it

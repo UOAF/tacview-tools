@@ -10,14 +10,15 @@ import Data.HashMap.Strict qualified as HM
 import Data.List (sortBy)
 import Data.Maybe
 import Data.Ord
-import Data.Set (Set)
-import Data.Set qualified as S
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Read qualified as T
 import Data.Word
 import Data.Vector.Strict (Vector)
 import Data.Vector.Strict qualified as V
+import GHC.Data.Word64Map.Strict (Word64Map)
+import GHC.Data.Word64Set (Word64Set)
+import GHC.Data.Word64Set qualified as S
 import Numeric
 
 import GHC.Stack
@@ -30,6 +31,10 @@ txtExt = ".txt.acmi"
 
 -- | Objects in TacView are identified by 64-bit hex values.
 type TacId = Word64
+
+type TacIdMap a = Word64Map a
+
+type TacIdSet = Word64Set
 
 -- | Pull the (#) off the front of the line and parse the rest as a double.
 parseTime :: HasCallStack => Text -> Double
@@ -61,7 +66,7 @@ data ParsedLine =
     RemLine TacId |
     -- | An event line: @0,Event=...|id1|id2|...@
     --   This can have multiple IDs!
-    EventLine Text (Set TacId) Text |
+    EventLine Text TacIdSet Text |
     -- | Global config or something else we don't care to parse
     OtherLine Text
     deriving stock (Show)

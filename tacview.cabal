@@ -59,6 +59,7 @@ library
                    bytestring,
                    conduit,
                    containers,
+                   ghc,
                    directory,
                    hashtables,
                    hoare,
@@ -76,7 +77,7 @@ executable tacview-filter
     main-is: Main.hs
     other-modules: Delta,
     build-depends: base,
-                   containers,
+                   ghc,
                    hashtables,
                    hoare,
                    tacview,
@@ -105,13 +106,13 @@ executable tacview-server
                    async,
                    bytestring,
                    containers,
+                   ghc,
                    hoare,
                    network,
                    safe-exceptions,
                    stm,
                    text,
                    optparse-applicative,
-                   unordered-containers,
                    vector
 
 executable tacview-stats
@@ -123,6 +124,7 @@ executable tacview-stats
                    async,
                    containers,
                    clock,
+                   ghc,
                    hoare,
                    text,
                    optparse-applicative,

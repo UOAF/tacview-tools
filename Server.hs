@@ -10,13 +10,10 @@ import Control.Monad
 import Data.ByteString qualified as BS
 import Data.Function (fix)
 import Data.IORef
-import Data.HashMap.Strict (HashMap)
-import Data.HashMap.Strict qualified as HM
 import Data.List (partition)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as M
 import Data.Maybe
-import Data.Set qualified as S
 import Data.Tacview
 import Data.Tacview.Delta
 import Data.Tacview.Ingest qualified as Tacview
@@ -27,6 +24,8 @@ import Data.Text.Encoding qualified as T
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Data.Word
+import GHC.Data.Word64Map.Strict qualified as WM
+import GHC.Data.Word64Set qualified as S
 import Foreign.StablePtr
 import Network.Socket
 import Network.Socket.ByteString qualified as NBS
@@ -100,7 +99,7 @@ data ServerState = ServerState {
     globalLines :: TVar (Vector Text),
     -- | Objects that should be sent to clients (after global lines) as they connect
     --   to catch them up.
-    liveObjects :: TVar (HashMap TacId ObjectState),
+    liveObjects :: TVar (TacIdMap ObjectState),
     -- If we're going to make the above mutable in IO,
     -- we might as well do the same for these,
     -- instead of mutating some and tail-calling the others.
@@ -212,7 +211,7 @@ feed ss source = do
     liveObjects <- readTVarIO ss.liveObjects
     let closeLine :: TacId -> ObjectState -> Maybe ParsedLine
         closeLine i s = PropLine i <$> closeOut s
-        allClosed = mapMaybe (uncurry closeLine) (HM.toList liveObjects)
+        allClosed = mapMaybe (uncurry closeLine) (WM.toList liveObjects)
     writeToClients ss allClosed
 
 -- A very similar shape as filter's `processLine`, but
@@ -239,9 +238,9 @@ feed' ss p = let
         -- so make sure its last known state goes out.
         co <- atomically $ do
             lo <- readTVar ss.liveObjects
-            case lo HM.!? x of
+            case lo WM.!? x of
                 Just going -> do
-                    writeTVar ss.liveObjects $ HM.delete x lo
+                    writeTVar ss.liveObjects $ WM.delete x lo
                     pure $ closeOut going
                 Nothing -> pure Nothing
         pure [PropLine x <$> co, maybeTime, Just p]
@@ -258,10 +257,10 @@ feed' ss p = let
             -- Is it anything we're tracking?
             deltaLine <- atomically $ do
                 lo <- readTVar ss.liveObjects
-                let prev = lo HM.!? pid
+                let prev = lo WM.!? pid
                 -- Update the properties we're tracking.
                 let (newState, dl) = updateObject prev now props
-                writeTVar ss.liveObjects $ HM.insert pid newState lo
+                writeTVar ss.liveObjects $ WM.insert pid newState lo
                 pure dl
             -- If we have a delta line, write some stuff...
             case deltaLine of
@@ -331,7 +330,7 @@ serve' ss serverName sock who = do
     bracket register deregister $ \(gl, lo) -> do
         -- Send the current state of the world at the time of connection.
         let glLines = V.toList gl
-            loLines = (\(k, v) -> PropLine k v.osCurrent) <$> HM.toList lo
+            loLines = (\(k, v) -> PropLine k v.osCurrent) <$> WM.toList lo
             syncBytes = T.encodeUtf8 $ T.unlines $ glLines <> fmap showLine loLines
         NBS.sendAll sock syncBytes
         slog $ show who <> " synced (" <> show (length loLines) <> " objects)"
