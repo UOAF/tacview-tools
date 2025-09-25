@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Data.Tacview.Annotate where
 
-import Control.Exception.Safe
+import Control.Exception
 
 -- Waiting not-so-patiently for GHC 9.12
 data ExceptionAnnotation e = Annotation String (ExceptionAnnotation e) | Ex e
@@ -12,8 +12,13 @@ instance (Show e) => Show (ExceptionAnnotation e) where
     show (Ex e) = show e
 
 whileIO :: String -> IO a -> IO a
-whileIO ctxt f = f `catchAny` c where
-    c :: SomeException -> IO a
-    c ex = case fromException ex of
-        Just (ea :: ExceptionAnnotation SomeException) -> throwIO $ Annotation ctxt ea
-        Nothing -> throwIO $ Annotation ctxt $ Ex ex
+whileIO ctxt f = f `catches` [Handler skipAs, Handler appendEx, Handler baseEx] where
+    -- Don't bother annotating async exceptions that are killing this thread.
+    skipAs :: SomeAsyncException -> IO a
+    skipAs = throwIO
+    -- Otherwise, if it's an existing annotation, append to it.
+    appendEx :: ExceptionAnnotation SomeException -> IO a
+    appendEx ea = throwIO $ Annotation ctxt ea
+    -- If it's anything else, start the annotation chain.
+    baseEx :: SomeException -> IO a
+    baseEx ex = throwIO $ Annotation ctxt $ Ex ex

@@ -5,7 +5,7 @@ import Control.Concurrent.Async
 import Control.Concurrent.Channel
 import Control.Concurrent.STM
 import Control.Concurrent.TBCQueue
-import Control.Exception.Safe
+import Control.Exception
 import Control.Monad
 import Data.ByteString qualified as BS
 import Data.Function (fix)
@@ -127,8 +127,9 @@ withServerState tacOut f = do
 
 withFileStream :: FilePath -> (TBCQueue Text -> IO a) -> IO a
 withFileStream tacOut f = do
-    let go q = runSink q `catchIO` handler
+    let go q = runSink q `catch` handler
         runSink q = Tacview.sinkZip tacOut >>= ($ q)
+        handler :: IOException -> IO ()
         handler e = slog $ "Error writing to " <> tacOut <> ": " <> show e
     fst <$> pipeline (newTBCQueueIO 1024) f go
 
@@ -305,7 +306,8 @@ async' f = async $ do
 
 serve :: ServerState -> Text -> Socket -> SockAddr -> IO ()
 serve ss serverName sock who = c `finally` close sock where
-    c = serve' ss serverName sock who `catchIO` handler
+    c = serve' ss serverName sock who `catch` handler
+    handler :: IOException -> IO ()
     handler e = slog $ show who <> " hung up: " <> show e
 
 serve' :: ServerState -> Text -> Socket -> SockAddr -> IO ()
