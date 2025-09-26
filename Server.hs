@@ -149,7 +149,7 @@ run Args{..} = withServerState zipOutput $ \ss -> do
 
     -- It's time to go.
     -- Close all clients and make sure not to not wait for anyone new.
-    slog $ "End of input" <> maybe "" (\zo -> ", finishing " <> zo) zipOutput
+    slog $ "End of input" <> maybe "" (", finishing " <>) zipOutput
     atomically $ do
         writeTVar ss.closing True
         clients <- readTVar ss.clients
@@ -160,7 +160,7 @@ run Args{..} = withServerState zipOutput $ \ss -> do
     atomically $ mapM_ closeChannel ss.fileStream
 
     -- ...and wait for clients to finish.
-    when (port /= Nothing) $ slog "Waiting a for clients to finish..."
+    when (isJust port) $ slog "Waiting a for clients to finish..."
     void $ timeout (round 5e6) $ do
         atomically $ do
             clients <- readTVar ss.clients
