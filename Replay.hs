@@ -2,7 +2,6 @@ module Main where
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Channel
-import Control.Concurrent.STM
 import Control.Concurrent.TBCQueue
 import Control.Monad
 import Data.Fixed
@@ -33,9 +32,8 @@ main = do
     hSetNewlineMode stdout noNewlineTranslation
     hSetNewlineMode stderr noNewlineTranslation
 
-    -- lol latency
-    hSetBuffering stdout LineBuffering
     -- lol IO
+    hSetBuffering stdout $ BlockBuffering Nothing
     hSetBuffering stdin $ BlockBuffering Nothing
     hSetBuffering stderr $ BlockBuffering Nothing
 
@@ -47,16 +45,13 @@ main = do
 run :: Args -> IO ()
 run Args{..} = do
     (src, _, _) <- Tacview.source zipInput
-    let pipe = pipeline (newTBCQueueIO 1024)
-        delayer sink = pipe src (`delay` sink)
-        writer = pipe delayer writeOut
+    void $ pipeline (newTBCQueueIO 1024) src delay
 
-    void writer
-
-delay :: Channel c => c Text -> c Text -> IO ()
-delay source sink = void $ stateConsumeChannel source Nothing $ \ !mdelta l -> do
+delay :: Channel c => c Text -> IO ()
+delay source = void $ stateConsumeChannel source Nothing $ \ !mdelta l -> do
     nd <- if T.isPrefixOf "#" l
         then do
+            hFlush stdout
             let t = parseTime l :: Double
             now <- getTime Monotonic
             case mdelta of
@@ -70,12 +65,9 @@ delay source sink = void $ stateConsumeChannel source Nothing $ \ !mdelta l -> d
                     threadDelay . d2micro $ sleepFor
                     pure mdelta
         else pure mdelta
-    atomically $ writeChannel' sink l
+    T.putStrLn l
     pure nd
 
 d2micro :: Double -> Int
 d2micro d = fromIntegral m where
     MkFixed m = realToFrac d :: Micro
-
-writeOut :: Channel c => c Text -> IO ()
-writeOut source = consumeChannel source T.putStrLn

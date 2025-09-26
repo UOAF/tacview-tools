@@ -93,7 +93,6 @@ executable tacview-replay
                    clock,
                    hoare,
                    optparse-applicative,
-                   stm,
                    tacview,
                    text,
 
