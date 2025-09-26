@@ -1,34 +1,50 @@
 on: [push, workflow_dispatch]
 name: build
+
 jobs:
   build:
-    name: Tacview Filter
-    runs-on: windows-latest
+    name: Tacview Filter (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build
+      - name: Set up Haskell (Stack)
         uses: haskell-actions/setup@v2
-        id: build
         with:
           enable-stack: true
           stack-version: "latest"
           stack-no-global: true
-      - run: stack --local-bin-path _build build --copy-bins
+
+      - name: Build
+        shell: pwsh
+        run: |
+          # Put arch-specific binaries under _build/<arch>
+          $OutDir = "_build/${{ matrix.arch }}"
+          mkdir $OutDir -Force | Out-Null
+          stack --local-bin-path $OutDir build --copy-bins
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Executables
-          path: _build/
+          name: Executables-${{ matrix.arch }}
+          path: _build/${{ matrix.arch }}/
 
       - name: Release (if a new version is tagged)
-        uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
         with:
           files: |
-            _build/tacview-filter.exe
-            _build/tacview-replay.exe
-            _build/tacview-server.exe
-            _build/tacview-stats.exe
+            _build/${{ matrix.arch }}/tacview-filter.exe
+            _build/${{ matrix.arch }}/tacview-replay.exe
+            _build/${{ matrix.arch }}/tacview-server.exe
+            _build/${{ matrix.arch }}/tacview-stats.exe
