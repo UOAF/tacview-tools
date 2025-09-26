@@ -14,6 +14,12 @@ import System.IO
 
 main :: IO ()
 main = withSocketsDo $ do
+    -- lol Windows
+    hSetNewlineMode stdin noNewlineTranslation
+    hSetNewlineMode stdout noNewlineTranslation
+    hSetNewlineMode stderr noNewlineTranslation
+
+    -- lol IO
     hSetBuffering stderr LineBuffering
     hSetBuffering stdin $ BlockBuffering Nothing
     hSetBuffering stdout $ BlockBuffering Nothing
