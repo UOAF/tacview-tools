@@ -52,11 +52,13 @@ library
                      Data.Tacview.Ignores
                      Data.Tacview.Ingest
                      Data.Tacview.MinId
+                     Data.Tacview.Rewrite
                      Data.Tacview.Sink
                      Data.Tacview.Source
     hs-source-dirs: lib
     build-depends: base,
                    bytestring,
+                   bytestring-trie,
                    conduit,
                    containers,
                    ghc,

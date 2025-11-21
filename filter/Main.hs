@@ -1,6 +1,7 @@
 module Main where
 
 import Control.Concurrent.Async
+import Control.Concurrent.STM
 import Control.Concurrent hiding (yield)
 import Control.Concurrent.Channel
 import Control.Concurrent.TBCQueue
@@ -8,10 +9,12 @@ import Control.Exception
 import Control.Monad
 import Data.IORef
 import Data.Ratio
+import Data.Tacview
 import Data.Tacview.Ignores as Ignores
 import Data.Tacview.Sink qualified as Tacview
 import Data.Tacview.Source
 import Data.Tacview.Ingest qualified as Tacview
+import Data.Tacview.Rewrite
 import Data.Void
 import Numeric
 import Options.Applicative
@@ -68,7 +71,8 @@ runFilter Args{..} = do
     (dst, linesWritten) <- Tacview.sink zipInput
     let pipe = pipeline (newTBCQueueIO 1024)
         thenDeltas sink = fst <$> pipe src (`deltas` sink)
-        filterPipeline = fst <$> pipe thenDeltas dst
+        thenRewrites sink = fst <$> pipe thenDeltas (`rewrites` sink)
+        filterPipeline = fst <$> pipe thenRewrites dst
 
     (FilteredLines f) <- if noProgress
         then filterPipeline
@@ -100,6 +104,11 @@ runFilter Args{..} = do
         ]
     let perSec = fromIntegral i / toRational dt
     hPutStrLn stderr $ show (round perSec :: Integer) <> " lines/second"
+
+-- Need an easy channel combinator for this
+rewrites :: Channel c => c ParsedLine -> c ParsedLine -> IO ()
+rewrites src sink = consumeChannel src $ \p -> do
+    atomically $ writeChannel' sink $ rewrite p
 
 progress :: Maybe SourceLength -> SourceProgress -> IORef Integer -> IO Void
 progress mlen i o = progress' mlen i o `onException` hPutStr stderr "\n\n"
