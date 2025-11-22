@@ -17,6 +17,7 @@ import Data.Maybe
 import Data.Tacview
 import Data.Tacview.Delta
 import Data.Tacview.Ingest qualified as Tacview
+import Data.Tacview.Rewrite
 import Data.Tacview.Sink qualified as Tacview
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -181,7 +182,7 @@ slog s = withMVar stderrLock . const $ do
 -- TODO: Use tryWriteChannel and drop guys who can't keep up.
 writeToClients :: ServerState -> [ParsedLine] -> IO ()
 writeToClients ss pl = do
-    let ts = showLine <$> pl
+    let ts = showLine . rewrite <$> pl
     -- This might start to fail if the output file stream dies.
     forM_ ss.fileStream $ \fs -> mapM_ (atomically . writeChannel fs) ts
     -- Keep feeding network clients even if so.
@@ -333,7 +334,8 @@ serve' ss serverName sock who = do
         -- Send the current state of the world at the time of connection.
         let glLines = V.toList gl
             loLines = (\(k, v) -> PropLine k v.osCurrent) <$> WM.toList lo
-            syncBytes = T.encodeUtf8 $ T.unlines $ glLines <> fmap showLine loLines
+            rewritten = rewrite <$> loLines
+            syncBytes = T.encodeUtf8 $ T.unlines $ glLines <> fmap showLine rewritten
         NBS.sendAll sock syncBytes
         slog $ show who <> " synced (" <> show (length loLines) <> " objects)"
 
