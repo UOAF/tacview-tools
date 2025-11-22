@@ -43,8 +43,8 @@ sinkStream = \case
     Nothing -> pure writeStdout
     Just fp -> go where
         go
-            | (zipExt `isSuffixOf` fp) = pure $ writeZip fp
-            | (txtExt `isSuffixOf` fp) = pure $ writeTxt fp
+            | zipExt `isSuffixOf` fp = pure $ writeZip fp
+            | txtExt `isSuffixOf` fp = pure $ writeTxt fp
             | otherwise = fail "expected a .zip.acmi or .txt.acmi file"
 
 writeStdout :: ConduitT () BS.ByteString (ResourceT IO) () -> IO ()

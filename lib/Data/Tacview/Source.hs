@@ -30,8 +30,8 @@ sourceC = \case
     Nothing -> pure (readStdin, Nothing)
     Just fp -> second Just <$> go where
         go
-            | (zipExt `isSuffixOf` fp) = readZip fp
-            | (txtExt `isSuffixOf` fp) = readTxt fp
+            | zipExt `isSuffixOf` fp = readZip fp
+            | txtExt `isSuffixOf` fp = readTxt fp
             | otherwise = fail "expected a .zip.acmi or .txt.acmi file"
 
 readStdin :: ByteConduit
