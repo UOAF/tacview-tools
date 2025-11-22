@@ -30,14 +30,28 @@ groundBranch n = case Trie.match nameTrie (T.encodeUtf8 n) of
 
 nameTrie :: Trie (Properties -> Properties)
 nameTrie = Trie.fromList [
+    ("ACRV", armor),
     ("AN/MPQ-", aaa),
     ("AN/MSQ-", aaa),
+    ("BMP-", armor),
+    ("BTR-", armor),
+    ("FGM-77 Squad", infantry),
     ("KSAM", rename "K-SAM Pegasus" . aaa),
+    ("K263", aaa),
     ("K-SAM", rename "K-SAM Pegasus" . aaa),
+    ("Light Mortar", infantry),
+    ("M16 Squad", infantry),
+    ("M1A1", tank),
+    ("M1A2", tank),
+    ("M2A", armor),
+    ("M3A", armor),
+    ("M60A", tank),
+    ("M6 ", aaa),
     ("MIM23", rename "MIM-23 Hawk" . aaa),
     ("MIM-23", rename "MIM-23 Hawk" . aaa),
     ("MIM104", rename "MIM-104 Patriot" . aaa),
     ("MIM-104", rename "MIM-104 Patriot" . aaa),
+    ("OE-349", aaa),
     ("SA-2", rename "SA-2 Guideline" . aaa),
     ("SA-3", rename "SA-3 Goa" . aaa),
     ("SA-4", rename "SA-4 Ganef" . aaa),
@@ -55,6 +69,12 @@ nameTrie = Trie.fromList [
     ("SA-19", rename "SA-19 Grison" . aaa),
     ("SA-20", rename "SA-20 Gargoyle" . aaa),
     ("Stinger", manpad),
+    ("T-54", tank),
+    ("T-62", tank),
+    ("T-72", tank),
+    ("T-80", tank),
+    ("T-90", tank),
+    ("TOW Squad", infantry),
     ("ZSU-23-4", rename "ZSU-23-4 Shilka" . aaa),
     ("ZPU", aaa)
     ]
@@ -68,5 +88,14 @@ retype t = HM.insert "Type" (Property t)
 aaa :: Properties -> Properties
 aaa = retype "Ground+AntiAircraft"
 
+infantry :: Properties -> Properties
+infantry = retype "Ground+Human+Infantry"
+
 manpad :: Properties -> Properties
 manpad = retype "Ground+Human+AntiAircraft"
+
+armor :: Properties -> Properties
+armor = retype "Ground+Armor+Vehicle"
+
+tank :: Properties -> Properties
+tank = retype "Ground+Heavy+Armor+Vehicle+Tank"
