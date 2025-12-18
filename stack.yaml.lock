@@ -17,7 +17,7 @@ packages:
     git: https://github.com/mrkline/hoare.git
 snapshots:
 - completed:
-    sha256: 468e1afa06cd069e57554f10e84fdf1ac5e8893e3eefc503ef837e2449f7e60c
-    size: 726310
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/24/11.yaml
-  original: lts-24.11
+    sha256: 4bc8e0388916c4000645c068dff642482d6ed1b68b747c2d4d444857979963e0
+    size: 726334
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/24/24.yaml
+  original: lts-24.24

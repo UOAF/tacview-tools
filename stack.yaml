@@ -1,4 +1,4 @@
-resolver: lts-24.11
+resolver: lts-24.24
 
 packages:
 - .
@@ -14,3 +14,7 @@ flags:
 
 ghc-options:
   "$everything": -O2
+
+nix:
+  enable: true
+  shell-file: "shell.nix"
