@@ -19,9 +19,9 @@ import Data.Vector.Strict qualified as V
 import GHC.Data.Word64Map.Strict (Word64Map)
 import GHC.Data.Word64Set (Word64Set)
 import GHC.Data.Word64Set qualified as S
-import Numeric
-
 import GHC.Stack
+import Numeric
+import Text.Regex.TDFA
 
 zipExt :: String
 zipExt = ".zip.acmi"
@@ -85,10 +85,11 @@ showLine (EventLine t is p) = mconcat [
     ]
 showLine (OtherLine l) = l
 
--- | Parse the `LineIds` of the line.
---   (or `Nothing` if it's not a line that affects filtering)
-parseLine :: Text -> ParsedLine
-parseLine l
+parseLine :: HasCallStack => Text -> ParsedLine
+parseLine = parseLine' . fixupNames
+
+parseLine' :: HasCallStack => Text -> ParsedLine
+parseLine' l
     | T.isPrefixOf "#" l = TimeLine $ parseTime l
     | T.isPrefixOf "0,Event=" l = runIdentity $ do
         let rest = T.drop (T.length "0,Event=") l
@@ -105,6 +106,26 @@ parseLine l
     | otherwise = case maybeId l of
         Just i -> PropLine i (lineProperties l)
         Nothing -> OtherLine l
+
+-- | BMS currently doesn't escape names with commas. Fish them out and do that ourselves.
+--
+-- Transforms "Name=Goofy, One" to "Name=Goofy; One".
+-- Assumes the name doesn't have equals signs in it
+-- and that the next property is well-formed (good grief).
+fixupNames :: Text -> Text
+fixupNames l = let
+    (beforeName, nameAndRest) = T.breakOn "Name=" l
+    -- Now we have two problems.
+    (name, nextProp, rest) = match nextPropertyRegex nameAndRest
+    escaped = T.replace "," ";" name
+    in if T.null nameAndRest || name == escaped
+        then l -- Fast path - don't reconcatenate something we didn't change.
+        else beforeName <> escaped <> nextProp <> rest
+
+-- Don't assume the compiler will notice it doesn't need to rebuild the regex each time.
+nextPropertyRegex :: Regex
+nextPropertyRegex = makeRegex (",[a-zA-Z]+=" :: Text)
+{-# NOINLINE nextPropertyRegex #-}
 
 -- | Positions are a special case, where each coordinate can be delta-encoded.
 data Property = Property Text | Position (Vector Text) | Referencing TacId
@@ -132,7 +153,7 @@ shaveZeroes t = if
     | otherwise -> t
 
 -- | Each property is <name>=<value>
-parseProperty :: Text -> (Text, Property)
+parseProperty :: HasCallStack => Text -> (Text, Property)
 parseProperty pl = (k, p) where
     (k, vWithEq) = T.breakOn "=" pl
     v = T.tail vWithEq
@@ -157,7 +178,7 @@ showProperties ps = -- Finagling - get T= first
 
 -- | Properties are comma-separated, with the first one being the `TacId`
 -- (which we've already parsed)
-lineProperties :: Text -> Properties
+lineProperties :: HasCallStack => Text -> Properties
 lineProperties t = HM.fromList $ fmap parseProperty (tail . T.splitOn "," $ t)
 
 -- | Update a pervious set of object properties with the new set

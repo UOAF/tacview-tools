@@ -65,6 +65,7 @@ library
                    directory,
                    hashtables,
                    hoare,
+                   regex-tdfa,
                    stm,
                    text,
                    transformers,
