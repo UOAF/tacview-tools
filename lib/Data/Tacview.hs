@@ -124,7 +124,7 @@ fixupNames l = let
 
 -- Don't assume the compiler will notice it doesn't need to rebuild the regex each time.
 nextPropertyRegex :: Regex
-nextPropertyRegex = makeRegex (",[a-zA-Z]+=" :: Text)
+nextPropertyRegex = makeRegex (",[a-zA-Z0-9]+=" :: Text)
 {-# NOINLINE nextPropertyRegex #-}
 
 -- | Positions are a special case, where each coordinate can be delta-encoded.
