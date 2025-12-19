@@ -109,7 +109,7 @@ parseLine' l
 
 -- | BMS currently doesn't escape names with commas. Fish them out and do that ourselves.
 --
--- Transforms "Name=Goofy, One" to "Name=Goofy; One".
+-- Transforms "Name=Goofy, One" to "Name=Goofy\, One".
 -- Assumes the name doesn't have equals signs in it
 -- and that the next property is well-formed (good grief).
 fixupNames :: Text -> Text
@@ -117,7 +117,7 @@ fixupNames l = let
     (beforeName, nameAndRest) = T.breakOn "Name=" l
     -- Now we have two problems.
     (name, nextProp, rest) = match nextPropertyRegex nameAndRest
-    escaped = T.replace "," ";" name
+    escaped = T.replace "," "\\," name
     in if T.null nameAndRest || name == escaped
         then l -- Fast path - don't reconcatenate something we didn't change.
         else beforeName <> escaped <> nextProp <> rest
@@ -179,7 +179,16 @@ showProperties ps = -- Finagling - get T= first
 -- | Properties are comma-separated, with the first one being the `TacId`
 -- (which we've already parsed)
 lineProperties :: HasCallStack => Text -> Properties
-lineProperties t = HM.fromList $ fmap parseProperty (tail . T.splitOn "," $ t)
+lineProperties t = HM.fromList $ fmap parseProperty (tail $ splitOnUnescapedCommas t)
+
+splitOnUnescapedCommas :: Text -> [Text]
+splitOnUnescapedCommas = joinEscaped . T.splitOn "," where
+    -- If the last character of the last token was '\', the comma was escaped.
+    -- Merge the two.
+    joinEscaped (x : y : xs) = case T.unsnoc x of
+        Just (_, '\\') -> (x <> "," <> y) : joinEscaped xs
+        _ -> x : joinEscaped (y : xs)
+    joinEscaped rest = rest
 
 -- | Update a pervious set of object properties with the new set
 -- (Updates are delta-encoded where unmentioned properties retain their previous value.)
