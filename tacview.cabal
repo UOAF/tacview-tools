@@ -1,7 +1,7 @@
 cabal-version:      3.0
 name:               tacview
 synopsis:           Tacview codec and Tacview accessories
-version:            1.1.0.0
+version:            1.1.1
 license:            Zlib
 author:             Matt Kline
 maintainer:         matt@bitbashing.io
