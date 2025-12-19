@@ -1,5 +1,4 @@
 let pkgs = (import <nixos> {});
-in pkgs.haskell.lib.buildStackProject {
-    name = "tacview";
+in pkgs.mkShell {
     buildInputs = with pkgs; [ zlib ];
 }
