@@ -1,6 +1,6 @@
 packages: .
 
-index-state: 2025-12-18T22:21:01Z
+index-state: 2026-10-01T00:00:00Z
 
 package *
     ghc-options: -O2

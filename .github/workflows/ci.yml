@@ -12,7 +12,7 @@ jobs:
         uses: haskell-actions/setup@v2
         id: build
         with:
-          ghc-version: "9.10.3"
+          ghc-version: "9.12.4"
       - run: |
           cabal build -O2
           cabal install -O2 --install-method copy --installdir _build
