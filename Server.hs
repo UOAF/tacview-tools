@@ -2,7 +2,9 @@ module Main where
 
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Concurrent.Channel
+import Control.Concurrent.Channel (Channel)
+import Control.Concurrent.Channel.Split
+import Control.Concurrent.Channel.Try qualified as Channel
 import Control.Concurrent.STM
 import Control.Concurrent.TBCQueue
 import Control.Exception
@@ -89,10 +91,10 @@ main = withSocketsDo $ do
     parser >>= run
 
 data ServerState = ServerState {
-    fileStream :: Maybe (TBCQueue Text),
+    fileStream :: Maybe (TBCQWriter Text),
     -- | Connected clients, represented as a map of channels to write to,
     --   addressed by the client address (mostly so they can easily deregister themselves)
-    clients :: TVar (Map SockAddr (TBCQueue Text)),
+    clients :: TVar (Map SockAddr (TBCQWriter Text)),
     -- | Hack: Since accept() insn't cancellable yet,
     --         we want a way to wait for /new/ workers after we start to quit.
     closing :: TVar Bool,
@@ -126,7 +128,7 @@ withServerState tacOut f = do
             let fileStream = Just fs
             f ServerState{..}
 
-withFileStream :: FilePath -> (TBCQueue Text -> IO a) -> IO a
+withFileStream :: FilePath -> (TBCQWriter Text -> IO a) -> IO a
 withFileStream tacOut f = do
     let go q = runSink q `catch` handler
         runSink q = Tacview.sinkZip tacOut >>= ($ q)
@@ -179,7 +181,7 @@ slog s = withMVar stderrLock . const $ do
 
 -- | Write out to each client.
 --
--- TODO: Use tryWriteChannel and drop guys who can't keep up.
+-- TODO: Use Channel.try and drop guys who can't keep up.
 writeToClients :: ServerState -> [ParsedLine] -> IO ()
 writeToClients ss pl = do
     let ts = showLine . rewrite <$> pl
@@ -201,9 +203,9 @@ writeToClients ss pl = do
         pure (f', r')
 
     forM_ (M.keys fulls) $ \k -> slog $ show k <> " dropped for not keeping up"
-    forM_ (M.elems readies) $ \c -> mapM_ (atomically . tryWriteChannel c) ts
+    forM_ (M.elems readies) $ \c -> mapM_ (atomically . Channel.try . writeChannel c) ts
 
-feed :: Channel c => ServerState -> c ParsedLine -> IO ()
+feed :: Channel c => ServerState -> Reader c ParsedLine -> IO ()
 feed ss source = do
     consumeChannel source $ \p -> do
         newLines <- feed' ss p
@@ -314,18 +316,18 @@ serve ss serverName sock who = c `finally` close sock where
 serve' :: ServerState -> Text -> Socket -> SockAddr -> IO ()
 serve' ss serverName sock who = do
     doHandshake serverName sock who
-    chan <- newTBCQueueIO 2048
+    (chanW, chanR) <- split <$> newTBCQueueIO 2048
     let register = atomically $ do
             lastCall <- readTVar ss.closing
             if lastCall
                 then do
-                    closeTBCQueue chan
+                    closeChannel chanR
                     pure (mempty, mempty)
                 else do
                     -- It's important we atomically add ourselves *and* get the current state of the world.
                     -- This guarantees we're synced up with everyone and ready for the next update
                     -- to arrive on our channel.
-                    modifyTVar' ss.clients $ M.insert who chan
+                    modifyTVar' ss.clients $ M.insert who chanW
                     gl <- readTVar ss.globalLines
                     lo <- readTVar ss.liveObjects
                     pure (gl, lo)
@@ -341,7 +343,7 @@ serve' ss serverName sock who = do
 
         -- Don't send one line at a time if we can help it;
         -- Send everything that's been queued.
-        fix $ \loop -> atomically (drainChannel chan) >>= \case
+        fix $ \loop -> atomically (drainChannel chanR) >>= \case
                 [] -> pure ()
                 drainedLines -> do
                     NBS.sendAll sock . T.encodeUtf8 . T.unlines $ drainedLines

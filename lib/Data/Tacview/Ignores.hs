@@ -3,7 +3,8 @@
 -- | (Mostly-BMS-specific) filters to ignore objects and events in the Tacview stream
 module Data.Tacview.Ignores (filterLines, FilteredLines(..)) where
 
-import Control.Concurrent.Channel
+import Control.Concurrent.Channel (Channel)
+import Control.Concurrent.Channel.Split
 import Control.Concurrent.STM
 import GHC.Data.Word64Set qualified as WS
 import Data.HashMap.Strict qualified as HM
@@ -88,8 +89,8 @@ newtype FilteredLines = FilteredLines Int
 
 filterLines
     :: Channel c
-    => c Text
-    -> c ParsedLine
+    => Reader c Text
+    -> Writer c ParsedLine
     -> IO FilteredLines
 filterLines source sink = whileIO "while parsing and filtering lines" $ do
     endState <- stateConsumeChannel source startState $ \ !fs l ->

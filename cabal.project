@@ -3,7 +3,7 @@ packages: .
 index-state: 2026-10-01T00:00:00Z
 
 package *
-    ghc-options: -O2
+    optimization: 2
 
 package zip
     flags: +disable-bzip2 +disable-zstd
@@ -11,4 +11,4 @@ package zip
 source-repository-package
     type: git
     location: https://github.com/mrkline/hoare.git
-    tag: a898b3bfb0ac65183870e320dea29c3d4696b5c2
+    tag: ca02e270ff931a37181bbb202f5fe375ee057ce5

@@ -2,7 +2,8 @@
 
 module Delta (deltas) where
 
-import Control.Concurrent.Channel
+import Control.Concurrent.Channel (Channel)
+import Control.Concurrent.Channel.Split
 import Control.Concurrent.STM
 import Control.Exception
 import Data.Bifunctor
@@ -35,10 +36,10 @@ startState = do
     l <- newIORef 0.0
     pure $ DeltaFilterState t n l
 
-writeOut :: Channel c => c ParsedLine -> [ParsedLine] -> IO ()
+writeOut :: Channel c => Writer c ParsedLine -> [ParsedLine] -> IO ()
 writeOut c = mapM_ (atomically . writeChannel' c)
 
-deltas :: Channel c => c ParsedLine -> c ParsedLine -> IO ()
+deltas :: Channel c => Reader c ParsedLine -> Writer c ParsedLine -> IO ()
 deltas source sink = do
     s <- startState
     deltas' s source sink
@@ -46,8 +47,8 @@ deltas source sink = do
 deltas'
     :: Channel c
     => DeltaFilterState
-    -> c ParsedLine
-    -> c ParsedLine
+    -> Reader c ParsedLine
+    -> Writer c ParsedLine
     -> IO ()
 deltas' dfs source sink = do
     consumeChannel source $ \p -> do

@@ -6,7 +6,8 @@ module Data.Tacview.Source (
 
 import Codec.Archive.Zip
 import Conduit
-import Control.Concurrent.Channel
+import Control.Concurrent.Channel (Channel)
+import Control.Concurrent.Channel.Split
 import Control.Concurrent.STM
 import Control.Monad
 import Data.Bifunctor
@@ -57,7 +58,7 @@ data SourceProgress = SourceProgress {
 
 source :: Channel c
     => Maybe FilePath
-    -> IO (c Text -> IO (), Maybe SourceLength, SourceProgress)
+    -> IO (Writer c Text -> IO (), Maybe SourceLength, SourceProgress)
 source mfp = do
     (srcC, len) <- sourceC mfp
     prog <- SourceProgress <$> newIORef 0 <*> newIORef 0

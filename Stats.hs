@@ -3,7 +3,8 @@ module Main where
 
 import Control.Concurrent.Async
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.Channel
+import Control.Concurrent.Channel (Channel)
+import Control.Concurrent.Channel.Split
 import Control.Concurrent.TBCQueue
 import Control.Exception
 import Control.Monad
@@ -135,7 +136,7 @@ data StatState = StatState {
 startingState :: StatState
 startingState = StatState 0.0 mempty mempty mempty
 
-runStats :: Channel c => c Text -> IO StatState
+runStats :: Channel c => Reader c Text -> IO StatState
 runStats lc = stateConsumeChannel lc startingState $ \ !s l -> pure (update s l)
 
 update :: StatState -> Text -> StatState

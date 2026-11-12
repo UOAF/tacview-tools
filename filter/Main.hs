@@ -3,7 +3,8 @@ module Main where
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Concurrent hiding (yield)
-import Control.Concurrent.Channel
+import Control.Concurrent.Channel (Channel)
+import Control.Concurrent.Channel.Split
 import Control.Concurrent.TBCQueue
 import Control.Exception
 import Control.Monad
@@ -107,7 +108,7 @@ runFilter Args{..} = do
     hPutStrLn stderr $ show (round perSec :: Integer) <> " lines/second"
 
 -- Need an easy channel combinator for this
-rewrites :: Channel c => c ParsedLine -> c ParsedLine -> IO ()
+rewrites :: Channel c => Reader c ParsedLine -> Writer c ParsedLine -> IO ()
 rewrites src sink = consumeChannel src $ \p -> do
     atomically $ writeChannel' sink $ rewrite p
 

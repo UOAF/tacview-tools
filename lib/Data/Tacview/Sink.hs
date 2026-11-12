@@ -3,7 +3,8 @@ module Data.Tacview.Sink (sink, sinkZip) where
 import Codec.Archive.Zip
 import Codec.Archive.Zip.Internal qualified as ZI
 import Conduit
-import Control.Concurrent.Channel
+import Control.Concurrent.Channel (Channel)
+import Control.Concurrent.Channel.Split
 import Control.Concurrent.STM
 import Data.ByteString qualified as BS
 import Data.IORef
@@ -15,7 +16,7 @@ import Data.Text qualified as T
 import System.IO
 
 -- | Write everything out when we're done.
-sink :: Channel c => Maybe FilePath -> IO (c ParsedLine -> IO (), IORef Integer)
+sink :: Channel c => Maybe FilePath -> IO (Reader c ParsedLine -> IO (), IORef Integer)
 sink mfp = do
     iow <- newIORef 0
     to <- sinkStream mfp
@@ -29,7 +30,7 @@ sink mfp = do
     pure (sinker, iow)
 
 -- | Writes already-printed lines to a ZIP file without progress; useful for the server.
-sinkZip :: Channel c => FilePath -> IO (c T.Text -> IO ())
+sinkZip :: Channel c => FilePath -> IO (Reader c T.Text -> IO ())
 sinkZip fp = do
     let srcC source = repeatMC (liftIO $ atomically (readChannel source))
             .| mapWhileC id

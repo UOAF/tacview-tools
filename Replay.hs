@@ -1,7 +1,8 @@
 module Main where
 
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.Channel
+import Control.Concurrent.Channel (Channel)
+import Control.Concurrent.Channel.Split
 import Control.Concurrent.TBCQueue
 import Control.Monad
 import Data.Fixed
@@ -48,7 +49,7 @@ run Args{..} = do
     (src, _, _) <- Tacview.source zipInput
     void $ pipeline (newTBCQueueIO 1024) src delay
 
-delay :: Channel c => c Text -> IO ()
+delay :: Channel c => Reader c Text -> IO ()
 delay source = void $ stateConsumeChannel source Nothing $ \ !mdelta l -> do
     nd <- if T.isPrefixOf "#" l
         then do

@@ -2,7 +2,8 @@ module Data.Tacview.MinId (
     minId
 ) where
 
-import Control.Concurrent.Channel
+import Control.Concurrent.Channel (Channel)
+import Control.Concurrent.Channel.Split
 import Control.Concurrent.STM
 import Control.Monad
 import Data.HashTable.IO qualified as HM
@@ -17,7 +18,7 @@ data MinIdState = MinIdState {
     nextId :: !(IORef TacId)
 }
 
-minId :: Channel c => c ParsedLine -> c ParsedLine -> IO ()
+minId :: Channel c => Reader c ParsedLine -> Writer c ParsedLine -> IO ()
 minId source sink = do
     t <- HM.new
     i <- newIORef 1
