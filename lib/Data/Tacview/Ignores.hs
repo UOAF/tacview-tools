@@ -93,7 +93,10 @@ filterLines
     -> Writer c ParsedLine
     -> IO FilteredLines
 filterLines source sink = whileIO "while parsing and filtering lines" $ do
-    endState <- stateConsumeChannel source startState $ \ !fs l ->
+    -- The source reads lines much faster than we parse them, so its queue is usually full.
+    -- Reading one line at a time would wake the source for every line.
+    -- Draining the queue wakes it once per batch.
+    endState <- stateConsumeChannelBatches' source startState $ \ !fs l ->
         whileIO ("on line `" <> T.unpack l <> "`)") $ do
             let p = parseLine l
                 (filtered, nextState) = go p

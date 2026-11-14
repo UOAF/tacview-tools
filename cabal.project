@@ -11,4 +11,4 @@ package zip
 source-repository-package
     type: git
     location: https://github.com/mrkline/hoare.git
-    tag: 8f4e03f46f9418583920a252f6fddd2692412abc
+    tag: b9944f536f915cce151153011e0ba483ce0a2abd
