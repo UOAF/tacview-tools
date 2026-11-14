@@ -19,25 +19,18 @@ common shared
                  -Wno-missing-local-signatures
                  -Wno-missing-role-annotations
                  -Wno-missing-safe-haskell-mode
-                 -Wno-monomorphism-restriction
                  -Wno-safe
                  -Wno-type-defaults
                  -Wno-unsafe
                  -Wno-x-partial
                  -threaded
                  -fno-ignore-asserts
-    default-language: Haskell2010
-    default-extensions: BangPatterns,
-                        DeriveAnyClass,
-                        DeriveGeneric,
-                        DerivingStrategies,
-                        ImportQualifiedPost,
-                        LambdaCase,
+    default-language: GHC2024
+    default-extensions: DeriveAnyClass,
                         MultiWayIf,
                         OverloadedRecordDot,
                         OverloadedStrings,
-                        RecordWildCards,
-                        TupleSections
+                        RecordWildCards
 
 common exeopts
     import: shared

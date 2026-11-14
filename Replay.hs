@@ -20,6 +20,7 @@ newtype Args = Args {
 
 parseArgs :: Parser Args
 parseArgs = Args <$> parseZipIn where
+    parseZipIn :: Parser (Maybe FilePath)
     parseZipIn = optional . strArgument $ mconcat [
         help "ACMI to replay. Otherwise reads from stdin and writes to stdout",
         metavar "recording.zip.acmi"

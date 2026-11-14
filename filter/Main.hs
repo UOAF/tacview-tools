@@ -31,6 +31,7 @@ data Args = Args {
 
 parseArgs :: Parser Args
 parseArgs = Args <$> parseZipIn <*> parseNoProgress where
+    parseZipIn :: Parser (Maybe FilePath)
     parseZipIn = optional . strArgument $ mconcat [
         help "ACMI to filter. Otherwise reads from stdin and writes to stdout",
         metavar "recording.zip.acmi"

@@ -42,17 +42,17 @@ startState = IgnoreFilterState{..} where
     -- but I never figured out how to give them a size or shape to show up.
     -- I was hoping it would be helpful to at least know when you hit something,
     -- but...
-    ifsIgnore = V.fromList [ "Type=Ground+Static" ]
+    ifsIgnore = V.fromList [ "Type=Ground+Static" ] :: Vector Text
     -- It's really dumb to get hit/timeout messages for ATGM rounds,
     -- which the ground AI shoots like they're machine gun ammo.
-    ifsUneventful = V.fromList [
+    (ifsUneventful :: Vector Text) = V.fromList [
         "Name=BGM-71 TOW",
         "Name=M72 LAW",
         "Name=M47 Dragon ATGM",
         "Name=AT-4" ]
     ifsIgnored = WS.empty
     ifsEventsIgnored = WS.empty
-    ifsLinesDropped = 0
+    ifsLinesDropped = 0 :: Int
 
 -- | Given a line and its object ID, update the list of things we're ignoring
 --   and the list of things whose events we're ignoring.
