@@ -110,6 +110,7 @@ parseLine' l
 -- | BMS currently doesn't escape names with commas. Fish them out and do that ourselves.
 --
 -- Transforms "Name=Goofy, One" to "Name=Goofy\, One".
+-- Keep already-escaped commas.
 -- Assumes the name doesn't have equals signs in it
 -- and that the next property is well-formed (good grief).
 fixupNames :: Text -> Text
@@ -118,10 +119,18 @@ fixupNames l = let
     (name, nextAndRest) = breakOnNextProperty nameAndRest
     in if T.null nameAndRest || not (T.elem ',' name)
         then l -- Fast path - don't reconcatenate something we didn't change.
-        else beforeName <> T.replace "," "\\," name <> nextAndRest
+        else beforeName <> escapeCommas name <> nextAndRest
+
+-- | Escape each comma that doesn't already have a backslash before it.
+escapeCommas :: Text -> Text
+escapeCommas = T.concat . go . T.split (== ',') where
+    go (x : y : rest) = x : separator x : go (y : rest)
+    go rest = rest
+    separator x = if "\\" `T.isSuffixOf` x then "," else "\\,"
 
 -- | Split before the first match of @,[a-zA-Z0-9]+=@ (the start of the next property),
 -- or return @(t, "")@ if there is no match.
+-- A comma with a backslash before it is escaped, so it can't start the next property.
 --
 -- This was a regex-tdfa match, but that was a fifth of the parse thread's time,
 -- and almost every BMS line has a name.
@@ -129,14 +138,16 @@ breakOnNextProperty :: Text -> (Text, Text)
 breakOnNextProperty t = go t where
     go s = let
         (_, commaAndRest) = T.break (== ',') s
+        -- A comma is one byte, so we can split on byte offsets.
+        at = TU.lengthWord8 t - TU.lengthWord8 commaAndRest
+        beforeComma = TU.takeWord8 at t
         afterComma = T.drop 1 commaAndRest
         (key, afterKey) = T.span isAsciiAlphaNum afterComma
         in if
             | T.null commaAndRest -> (t, T.empty)
-            | not (T.null key) && "=" `T.isPrefixOf` afterKey -> let
-                -- A comma is one byte, so we can split on byte offsets.
-                at = TU.lengthWord8 t - TU.lengthWord8 commaAndRest
-                in (TU.takeWord8 at t, TU.dropWord8 at t)
+            | not ("\\" `T.isSuffixOf` beforeComma)
+                && not (T.null key)
+                && "=" `T.isPrefixOf` afterKey -> (beforeComma, TU.dropWord8 at t)
             | otherwise -> go afterComma
     isAsciiAlphaNum c = isAsciiUpper c || isAsciiLower c || isDigit c
 
@@ -205,9 +216,10 @@ splitOnUnescapedCommas t
     | otherwise = T.split (== ',') t -- Nothing escaped
   where
     -- If the last character of the last token was '\', the comma was escaped.
-    -- Merge the two.
+    -- Merge the two, then check the result again,
+    -- since the next comma (e.g., in "A\, B\, C") might be escaped too.
     joinEscaped (x : y : xs) = case T.unsnoc x of
-        Just (_, '\\') -> (x <> "," <> y) : joinEscaped xs
+        Just (_, '\\') -> joinEscaped $ (x <> "," <> y) : xs
         _ -> x : joinEscaped (y : xs)
     joinEscaped rest = rest
 
