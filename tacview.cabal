@@ -56,7 +56,6 @@ library
                    containers,
                    ghc,
                    directory,
-                   hashtables,
                    hoare,
                    stm,
                    text,
