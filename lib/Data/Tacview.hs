@@ -3,7 +3,7 @@
 module Data.Tacview where
 
 import Control.Monad
-import Data.Char (isDigit)
+import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Functor.Identity
 import Data.HashMap.Strict (HashMap)
 import Data.HashMap.Strict qualified as HM
@@ -13,6 +13,7 @@ import Data.Ord
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Read qualified as T
+import Data.Text.Unsafe qualified as TU
 import Data.Word
 import Data.Vector.Strict (Vector)
 import Data.Vector.Strict qualified as V
@@ -21,7 +22,6 @@ import GHC.Data.Word64Set (Word64Set)
 import GHC.Data.Word64Set qualified as S
 import GHC.Stack
 import Numeric
-import Text.Regex.TDFA
 
 zipExt :: String
 zipExt = ".zip.acmi"
@@ -115,17 +115,30 @@ parseLine' l
 fixupNames :: Text -> Text
 fixupNames l = let
     (beforeName, nameAndRest) = T.breakOn "Name=" l
-    -- Now we have two problems.
-    (name, nextProp, rest) = match nextPropertyRegex nameAndRest
-    escaped = T.replace "," "\\," name
-    in if T.null nameAndRest || name == escaped
+    (name, nextAndRest) = breakOnNextProperty nameAndRest
+    in if T.null nameAndRest || not (T.elem ',' name)
         then l -- Fast path - don't reconcatenate something we didn't change.
-        else beforeName <> escaped <> nextProp <> rest
+        else beforeName <> T.replace "," "\\," name <> nextAndRest
 
--- Don't assume the compiler will notice it doesn't need to rebuild the regex each time.
-nextPropertyRegex :: Regex
-nextPropertyRegex = makeRegex (",[a-zA-Z0-9]+=" :: Text)
-{-# NOINLINE nextPropertyRegex #-}
+-- | Split before the first match of @,[a-zA-Z0-9]+=@ (the start of the next property),
+-- or return @(t, "")@ if there is no match.
+--
+-- This was a regex-tdfa match, but that was a fifth of the parse thread's time,
+-- and almost every BMS line has a name.
+breakOnNextProperty :: Text -> (Text, Text)
+breakOnNextProperty t = go t where
+    go s = let
+        (_, commaAndRest) = T.break (== ',') s
+        afterComma = T.drop 1 commaAndRest
+        (key, afterKey) = T.span isAsciiAlphaNum afterComma
+        in if
+            | T.null commaAndRest -> (t, T.empty)
+            | not (T.null key) && "=" `T.isPrefixOf` afterKey -> let
+                -- A comma is one byte, so we can split on byte offsets.
+                at = TU.lengthWord8 t - TU.lengthWord8 commaAndRest
+                in (TU.takeWord8 at t, TU.dropWord8 at t)
+            | otherwise -> go afterComma
+    isAsciiAlphaNum c = isAsciiUpper c || isAsciiLower c || isDigit c
 
 -- | Positions are a special case, where each coordinate can be delta-encoded.
 data Property = Property Text | Position (Vector Text) | Referencing TacId
@@ -136,33 +149,38 @@ showProperty (Property t) = t
 showProperty (Position v) = T.intercalate "|" $ V.toList v
 showProperty (Referencing tid) = T.pack $ showHex tid ""
 
+-- | Trim trailing zeroes from decimals (@1.50@ -> @1.5@, @2.00@ -> @2@, @-0.0@ -> @0@).
+--
+-- The result is always a slice of the input, so this doesn't copy anything.
 shaveZeroes :: Text -> Text
-shaveZeroes t = if
-    | t == "" -> ""
-    | T.head t == '-' -> let
-        n = shaveZeroes (T.tail t)
-        in if n == "0" then n else "-" <> n
-    | T.all (\c -> isDigit c || c == '.') t -> let
-        go [whole, fractional] = let
-            trimmedFrac = T.dropWhileEnd (== '0') fractional
-            in if T.null trimmedFrac
-                then whole
-                else whole <> "." <> trimmedFrac
-        go _ = t
-        in go $ T.splitOn "." t
-    | otherwise -> t
+shaveZeroes t = case T.uncons t of
+    Nothing -> t
+    Just ('-', rest) -> let
+        n = shaveZeroes rest
+        -- n is a prefix of rest unless it's "0", so "-" <> n is a prefix of t.
+        in if n == "0" then n else TU.takeWord8 (TU.lengthWord8 n + 1) t
+    Just _ -> case T.uncons (T.dropWhile isDigit t) of
+        -- Only digits, then one decimal point, then only digits
+        Just ('.', fractional) | T.all isDigit fractional -> let
+            trimmed = T.dropWhileEnd (== '0') t
+            in if T.last trimmed == '.' then T.init trimmed else trimmed
+        _ -> t
 
 -- | Each property is <name>=<value>
+--
+-- This runs for every property of every line, so it's strict to avoid building thunks.
 parseProperty :: HasCallStack => Text -> (Text, Property)
-parseProperty pl = (k, p) where
-    (k, vWithEq) = T.breakOn "=" pl
-    v = T.tail vWithEq
-    -- We do a little special casing, eh?
-    p = if
-        | k == "T" ->  Position . V.fromList $ shaveZeroes <$> T.splitOn "|" v
-        | k == "FocusedTarget" -> Referencing $ parseId v
-        | "LockedTarget" `T.isPrefixOf` k -> Referencing $ parseId v
-        | otherwise -> Property $ shaveZeroes v
+parseProperty pl = case T.break (== '=') pl of
+    (k, vWithEq) -> case T.uncons vWithEq of
+        Nothing -> error $ "Property without '=': " <> T.unpack pl
+        Just (_, v) -> let
+            -- We do a little special casing, eh?
+            !p = if
+                | k == "T" ->  Position . V.fromList $ shaveZeroes <$> T.split (== '|') v
+                | k == "FocusedTarget" -> Referencing $ parseId v
+                | "LockedTarget" `T.isPrefixOf` k -> Referencing $ parseId v
+                | otherwise -> Property $ shaveZeroes v
+            in (k, p)
 
 type Properties = HashMap Text Property
 
@@ -182,7 +200,10 @@ lineProperties :: HasCallStack => Text -> Properties
 lineProperties t = HM.fromList $ fmap parseProperty (tail $ splitOnUnescapedCommas t)
 
 splitOnUnescapedCommas :: Text -> [Text]
-splitOnUnescapedCommas = joinEscaped . T.splitOn "," where
+splitOnUnescapedCommas t
+    | T.elem '\\' t = joinEscaped $ T.split (== ',') t
+    | otherwise = T.split (== ',') t -- Nothing escaped
+  where
     -- If the last character of the last token was '\', the comma was escaped.
     -- Merge the two.
     joinEscaped (x : y : xs) = case T.unsnoc x of

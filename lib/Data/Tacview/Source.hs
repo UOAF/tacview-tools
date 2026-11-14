@@ -19,6 +19,8 @@ import Data.Maybe
 import Data.Tacview (zipExt, txtExt)
 import Data.Tacview.Annotate
 import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import System.Directory (getFileSize)
 import System.IO
 
@@ -68,5 +70,23 @@ source mfp = do
             atomically $ writeChannel' c l
             atomicModifyIORef' prog.lines $ \p -> (p + 1, ())
         run c = whileIO ("while reading " <> fromMaybe "stdin" mfp) $ runConduitRes $
-            srcC .| iterMC countBytes .| decodeUtf8C .| linesUnboundedC .| mapM_C (liftIO . go c)
+            srcC .| iterMC countBytes .| decodeLinesC .| mapM_C (liftIO . go c)
     pure (run, len, prog)
+
+-- | Splits UTF-8 bytes into lines, like @decodeUtf8C .| linesUnboundedC@.
+--
+-- linesUnboundedC gets 'T.break' through a typeclass dictionary,
+-- so it calls an unknown predicate (and allocates a boxed 'Char') for each character.
+-- That costs more than all our parsing. 'T.lines' uses memchr instead.
+decodeLinesC :: MonadThrow m => ConduitT BS.ByteString Text m ()
+decodeLinesC = loop BS.empty where
+    loop partial = await >>= \case
+        Nothing -> unless (BS.null partial) $ decode partial >>= yield
+        Just b -> case BS.elemIndexEnd 10 b of
+            Nothing -> loop (partial <> b)
+            Just i -> do
+                let (complete, rest) = BS.splitAt (i + 1) b
+                decode (partial <> complete) >>= yieldMany . T.lines
+                loop rest
+    decode :: MonadThrow m => BS.ByteString -> m Text
+    decode = either throwM pure . T.decodeUtf8'
