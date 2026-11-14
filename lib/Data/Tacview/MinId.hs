@@ -3,8 +3,7 @@ module Data.Tacview.MinId (
 ) where
 
 import Control.Concurrent.Channel (Channel)
-import Control.Concurrent.Channel.Metrics (ReaderMetrics, stateConsumeChannel)
-import Control.Concurrent.Channel.Split (Reader, Writer, writeChannel')
+import Control.Concurrent.Channel.Split (Reader, Writer, stateConsumeChannel, writeChannel')
 import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.Trans.State.Strict
@@ -20,8 +19,8 @@ data MinIdState = MinIdState {
     nextId :: !TacId
 }
 
-minId :: Channel c => Reader c ParsedLine -> Writer c ParsedLine -> IO ReaderMetrics
-minId source sink = fmap snd $ stateConsumeChannel source (MinIdState WM.empty 1) $ \s l -> do
+minId :: Channel c => Reader c ParsedLine -> Writer c ParsedLine -> IO ()
+minId source sink = void $ stateConsumeChannel source (MinIdState WM.empty 1) $ \s l -> do
     let (l', s') = runState (mapLine l) s
     atomically $ writeChannel' sink l'
     pure s'
