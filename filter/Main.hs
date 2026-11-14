@@ -4,7 +4,8 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Concurrent hiding (yield)
 import Control.Concurrent.Channel (Channel)
-import Control.Concurrent.Channel.Split
+import Control.Concurrent.Channel.Metrics
+import Control.Concurrent.Channel.Split (Reader, Writer, pipeline, writeChannel')
 import Control.Concurrent.TBCQueue
 import Control.Exception
 import Control.Monad
@@ -72,11 +73,11 @@ runFilter Args{..} = do
     (src, mlen, readProgress) <- Tacview.ingest Tacview.MinifiedIds zipInput
     (dst, linesWritten) <- Tacview.sink zipInput
     let pipe = pipeline (newTBCQueueIO 1024)
-        thenDeltas sink = fst <$> pipe src (`deltas` sink)
-        thenRewrites sink = fst <$> pipe thenDeltas (`rewrites` sink)
+        thenDeltas sink = pipe src (`deltas` sink)
+        thenRewrites sink = pipe thenDeltas (`rewrites` sink)
         filterPipeline = fst <$> pipe thenRewrites dst
 
-    (FilteredLines f) <- if noProgress
+    ((FilteredLines f, DeltasMetrics d), RewritesMetrics m) <- if noProgress
         then filterPipeline
         else do
             let progressThread = progress mlen readProgress linesWritten
@@ -92,6 +93,8 @@ runFilter Args{..} = do
         hClearFromCursorToLineBeginning stderr
         hCursorDownLine stderr 0
     hPutStrLn stderr $ "in " <> dts <> " seconds"
+    printReaderMetrics "delta encoding" d
+    printReaderMetrics "property rewrites" m
     hPutStrLn stderr $ show f <> " lines ignored"
     -- Hmm: https://gitlab.haskell.org/ghc/ghc/-/issues/22468
     -- https://github.com/haskell/core-libraries-committee/issues/112
@@ -107,9 +110,11 @@ runFilter Args{..} = do
     let perSec = fromIntegral i / toRational dt
     hPutStrLn stderr $ show (round perSec :: Integer) <> " lines/second"
 
+newtype RewritesMetrics = RewritesMetrics ReaderMetrics
+
 -- Need an easy channel combinator for this
-rewrites :: Channel c => Reader c ParsedLine -> Writer c ParsedLine -> IO ()
-rewrites src sink = consumeChannel src $ \p -> do
+rewrites :: Channel c => Reader c ParsedLine -> Writer c ParsedLine -> IO RewritesMetrics
+rewrites src sink = fmap RewritesMetrics $ consumeChannel src $ \p -> do
     atomically $ writeChannel' sink $ rewrite p
 
 progress :: Maybe SourceLength -> SourceProgress -> IORef Integer -> IO Void
@@ -165,3 +170,13 @@ spinny (Just n) = case n `mod` 4 of
     2 -> '-'
     3 -> '\\'
     _ -> undefined
+
+printReaderMetrics :: String -> ReaderMetrics -> IO ()
+printReaderMetrics name m = hPutStrLn stderr $ mconcat [
+    name,
+    " waited ",
+    showFFloat (Just 2) (realToFrac m.elapsedWait) "s",
+    " for ",
+    show (round $ m.waitedFor % m.totalRead * 100),
+    "% of its inputs"
+    ] where

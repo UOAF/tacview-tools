@@ -1,9 +1,10 @@
 {-# LANGUAGE StrictData #-}
 
-module Delta (deltas) where
+module Delta (deltas, DeltasMetrics(..)) where
 
 import Control.Concurrent.Channel (Channel)
-import Control.Concurrent.Channel.Split
+import Control.Concurrent.Channel.Split (Reader, Writer, writeChannel')
+import Control.Concurrent.Channel.Metrics (ReaderMetrics, consumeChannel)
 import Control.Concurrent.STM
 import Control.Exception
 import Data.Bifunctor
@@ -39,19 +40,21 @@ startState = do
 writeOut :: Channel c => Writer c ParsedLine -> [ParsedLine] -> IO ()
 writeOut c = mapM_ (atomically . writeChannel' c)
 
-deltas :: Channel c => Reader c ParsedLine -> Writer c ParsedLine -> IO ()
+newtype DeltasMetrics = DeltasMetrics ReaderMetrics
+
+deltas :: Channel c => Reader c ParsedLine -> Writer c ParsedLine -> IO DeltasMetrics
 deltas source sink = do
     s <- startState
-    deltas' s source sink
+    DeltasMetrics <$> deltas' s source sink
 
 deltas'
     :: Channel c
     => DeltaFilterState
     -> Reader c ParsedLine
     -> Writer c ParsedLine
-    -> IO ()
+    -> IO ReaderMetrics
 deltas' dfs source sink = do
-    consumeChannel source $ \p -> do
+    m <- consumeChannel source $ \p -> do
         newLines <- processLine dfs p
         writeOut sink $ catMaybes newLines
 
@@ -62,6 +65,7 @@ deltas' dfs source sink = do
     los <- HM.toList dfs.liveObjects
     let allClosed = mapMaybe (uncurry closeLine) los
     writeOut sink allClosed
+    pure m
 
 processLine
     :: DeltaFilterState
