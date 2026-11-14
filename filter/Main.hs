@@ -75,9 +75,9 @@ runFilter Args{..} = do
     let pipe = pipeline (newTBCQueueIO 1024)
         thenDeltas sink = pipe src (`deltas` sink)
         thenRewrites sink = pipe thenDeltas (`rewrites` sink)
-        filterPipeline = fst <$> pipe thenRewrites dst
+        filterPipeline = pipe thenRewrites dst
 
-    ((FilteredLines f, DeltasMetrics d), RewritesMetrics m) <- if noProgress
+    (((ingested, DeltasMetrics d), RewritesMetrics m), sinkMetrics) <- if noProgress
         then filterPipeline
         else do
             let progressThread = progress mlen readProgress linesWritten
@@ -93,8 +93,11 @@ runFilter Args{..} = do
         hClearFromCursorToLineBeginning stderr
         hCursorDownLine stderr 0
     hPutStrLn stderr $ "in " <> dts <> " seconds"
+    mapM_ (uncurry printReaderMetrics) ingested.stageMetrics
     printReaderMetrics "delta encoding" d
     printReaderMetrics "property rewrites" m
+    printReaderMetrics "output" sinkMetrics
+    let FilteredLines f = ingested.linesFiltered
     hPutStrLn stderr $ show f <> " lines ignored"
     -- Hmm: https://gitlab.haskell.org/ghc/ghc/-/issues/22468
     -- https://github.com/haskell/core-libraries-committee/issues/112

@@ -4,7 +4,8 @@
 module Data.Tacview.Ignores (filterLines, FilteredLines(..)) where
 
 import Control.Concurrent.Channel (Channel)
-import Control.Concurrent.Channel.Split
+import Control.Concurrent.Channel.Metrics (ReaderMetrics, stateConsumeChannelBatches')
+import Control.Concurrent.Channel.Split (Reader, Writer, writeChannel')
 import Control.Concurrent.STM
 import GHC.Data.Word64Set qualified as WS
 import Data.HashMap.Strict qualified as HM
@@ -91,12 +92,12 @@ filterLines
     :: Channel c
     => Reader c Text
     -> Writer c ParsedLine
-    -> IO FilteredLines
+    -> IO (FilteredLines, ReaderMetrics)
 filterLines source sink = whileIO "while parsing and filtering lines" $ do
     -- The source reads lines much faster than we parse them, so its queue is usually full.
     -- Reading one line at a time would wake the source for every line.
     -- Draining the queue wakes it once per batch.
-    endState <- stateConsumeChannelBatches' source startState $ \ !fs l ->
+    (endState, m) <- stateConsumeChannelBatches' source startState $ \ !fs l ->
         whileIO ("on line `" <> T.unpack l <> "`)") $ do
             let p = parseLine l
                 (filtered, nextState) = go p
@@ -122,7 +123,7 @@ filterLines source sink = whileIO "while parsing and filtering lines" $ do
                 nextState' = nextState { ifsLinesDropped = nextCount }
             pure nextState'
 
-    pure $ FilteredLines endState.ifsLinesDropped
+    pure (FilteredLines endState.ifsLinesDropped, m)
 
 -- | The BMS server currently serves BS g-force measurements which are always 0,
 -- so then Tacview sessions show everything at 0G.

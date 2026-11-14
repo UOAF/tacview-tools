@@ -4,6 +4,8 @@ import Codec.Archive.Zip
 import Codec.Archive.Zip.Internal qualified as ZI
 import Conduit
 import Control.Concurrent.Channel (Channel)
+import Control.Concurrent.Channel.Metrics (ReaderMetrics, newReaderMetrics)
+import Control.Concurrent.Channel.Metrics qualified as Metrics
 import Control.Concurrent.Channel.Split
 import Control.Concurrent.STM
 import Data.ByteString qualified as BS
@@ -16,17 +18,24 @@ import Data.Text qualified as T
 import System.IO
 
 -- | Write everything out when we're done.
-sink :: Channel c => Maybe FilePath -> IO (Reader c ParsedLine -> IO (), IORef Integer)
+sink :: Channel c => Maybe FilePath -> IO (Reader c ParsedLine -> IO ReaderMetrics, IORef Integer)
 sink mfp = do
     iow <- newIORef 0
     to <- sinkStream mfp
-    let srcC source = repeatMC (liftIO $ atomically (readChannel source))
-            .| mapWhileC id
-            .| mapC showLine
-            .| iterMC (const . liftIO $ atomicModifyIORef' iow $ \p -> (p + 1, ()))
-            .| unlinesC
-            .| encodeUtf8C
-        sinker src = to $ srcC src
+    let -- The writers take conduits that return (), since ZIP entries need one,
+        -- so the reader's metrics go out through an IORef instead.
+        readAll source mr = go newReaderMetrics where
+            go !m = liftIO (Metrics.readChannel source m) >>= \case
+                (Just l, m') -> yield l >> go m'
+                (Nothing, m') -> liftIO $ writeIORef mr m'
+        sinker src = do
+            mr <- newIORef newReaderMetrics
+            to $ readAll src mr
+                .| mapC showLine
+                .| iterMC (const . liftIO $ atomicModifyIORef' iow $ \p -> (p + 1, ()))
+                .| unlinesC
+                .| encodeUtf8C
+            readIORef mr
     pure (sinker, iow)
 
 -- | Writes already-printed lines to a ZIP file without progress; useful for the server.
